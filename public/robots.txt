@@ -10,3 +10,4 @@ Allow: /
 
 User-agent: *
 Allow: /
+Sitemap: https://shipsight.in/sitemap.xml
