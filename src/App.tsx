@@ -10,6 +10,7 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import { Login } from "./pages/Login";
 import Dashboard from "@/pages/Dashboard";
+import Landing from "@/pages/Landing";
 
 const queryClient = new QueryClient();
 
@@ -77,17 +78,19 @@ const App = () => {
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          {!isAuthenticated ? (
-            <Login onLogin={handleLogin} />
-          ) : (
-            <Routes>
-              <Route path="/dashboard" element={<Dashboard onLogout={handleLogout} />} />
-              <Route path="/vms" element={<Index onLogout={handleLogout} />} />
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          )}
+          {(() => {
+            const isVms = typeof window !== "undefined" && window.location.hostname.startsWith("vms.");
+            const homeEl = isVms ? (isAuthenticated ? <Index onLogout={handleLogout} /> : <Login onLogin={handleLogin} />) : <Landing />;
+            const authRedirect = isVms ? "/" : "/vms";
+            return (
+              <Routes>
+                <Route path="/" element={homeEl} />
+                <Route path="/vms" element={isAuthenticated ? <Index onLogout={handleLogout} /> : <Login onLogin={handleLogin} />} />
+                <Route path="/dashboard" element={isAuthenticated ? <Dashboard onLogout={handleLogout} /> : <Navigate to={authRedirect} replace />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            );
+          })()}
         </BrowserRouter>
         <Analytics />
         <SpeedInsights />
