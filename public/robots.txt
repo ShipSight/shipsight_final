@@ -11,3 +11,4 @@ Allow: /
 User-agent: *
 Allow: /
 Sitemap: https://shipsight.in/sitemap.xml
+Sitemap: https://vms.shipsight.in/sitemap.xml
