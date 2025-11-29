@@ -42,6 +42,7 @@ export const BarcodeInput = ({ onBarcodeChange, onSubmitBarcode, isRecording }: 
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           ref={inputRef}
+          id="barcode-input"
           // keep editable during recording per request
           className="bg-[var(--glass-light)] backdrop-blur-2xl border-[var(--glass-border)] text-foreground placeholder:text-muted-foreground/50 focus:bg-[var(--glass-medium)] focus:border-primary/50 transition-all duration-300 h-14 text-base px-5 rounded-2xl shadow-inner"
         />

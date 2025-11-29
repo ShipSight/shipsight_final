@@ -899,6 +899,7 @@ const Index = ({ onLogout }: IndexProps) => {
                             <Button
                               variant="glass-white"
                               className={`h-12 w-full px-4 text-sm font-semibold shadow-lg flex-1 items-center justify-center ${isNext ? 'ring-2 ring-primary shadow-[var(--shadow-glow)]' : ''}`}
+                              onMouseDown={(e) => { e.preventDefault(); const inp = document.getElementById('barcode-input') as HTMLInputElement | null; if (inp) { inp.focus(); inp.select(); } }}
                               onClick={() => handleCapture(t)}
                               disabled={captureDisabled}
                               title={isNext ? `Capture ${t}` : isDone ? `${t} captured` : 'Wait for next step'}
@@ -908,6 +909,7 @@ const Index = ({ onLogout }: IndexProps) => {
                             <Button
                               variant="glass-white"
                               className="h-10 w-10 p-0 text-sm font-semibold shadow-lg items-center justify-center"
+                              onMouseDown={(e) => { e.preventDefault(); const inp = document.getElementById('barcode-input') as HTMLInputElement | null; if (inp) { inp.focus(); inp.select(); } }}
                               onClick={() => handleCapture(t, { retake: true })}
                               disabled={retakeDisabled}
                               title={`Reload ${t}`}
