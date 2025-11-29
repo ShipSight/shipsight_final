@@ -124,12 +124,13 @@ const App = () => {
           })()}
           {(() => {
             const isVms = typeof window !== "undefined" && window.location.hostname.startsWith("vms.");
-            const homeEl = isVms ? (isAuthenticated ? <Index onLogout={handleLogout} /> : <Login onLogin={handleLogin} />) : <Landing />;
+            const homeEl = isVms ? (isAuthenticated ? <Dashboard onLogout={handleLogout} /> : <Login onLogin={handleLogin} />) : <Landing />;
             const authRedirect = isVms ? "/" : "/vms";
             return (
               <Routes>
                 <Route path="/" element={homeEl} />
-                <Route path="/vms" element={isAuthenticated ? <Index onLogout={handleLogout} /> : <Login onLogin={handleLogin} />} />
+                <Route path="/vms" element={isAuthenticated ? <Dashboard onLogout={handleLogout} /> : <Login onLogin={handleLogin} />} />
+                <Route path="/rec" element={isAuthenticated ? <Index onLogout={handleLogout} /> : <Navigate to={authRedirect} replace />} />
                 <Route path="/dashboard" element={isAuthenticated ? <Dashboard onLogout={handleLogout} /> : <Navigate to={authRedirect} replace />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>

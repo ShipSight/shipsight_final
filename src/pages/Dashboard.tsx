@@ -167,7 +167,7 @@ const Dashboard = ({ onLogout }: DashboardProps) => {
               <div className="flex items-center gap-2"><FileArchive className="w-4 h-4 text-primary" /><span>Reverse photos ZIP</span></div>
             </div>
             <div className="mt-auto">
-              <Button variant="glass-white" className="w-full h-12 px-6 text-base font-semibold hover:bg-[var(--glass-hover)]" onClick={() => navigate("/vms")}>Open VMS</Button>
+              <Button variant="glass-white" className="w-full h-12 px-6 text-base font-semibold hover:bg-[var(--glass-hover)]" onClick={() => navigate("/rec")}>Open VMS</Button>
             </div>
           </div>
 
