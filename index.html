@@ -4,17 +4,78 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" href="/logo.png" type="image/png" />
-    <title>ShipSight Web Recorder</title>
-    <meta name="description" content="Record packing videos linked to scanned or typed barcodes with beautiful glassmorphism design" />
+    <title>ShipSight | E-commerce Video Management & Packing Recorder</title>
+    <meta name="description" content="E-commerce video management (VMS) for packing — barcode-linked recording." />
+    <meta name="keywords" content="vms, video management, ecom video management, shipsight, packing videos, barcode" />
+    <meta name="robots" content="index,follow" />
     <meta name="author" content="ShipSight" />
+    <link rel="canonical" href="https://shipsight.in/" />
 
-    <meta property="og:title" content="ShipSight Web Recorder" />
-    <meta property="og:description" content="Record packing videos with barcode association" />
+    <meta property="og:site_name" content="ShipSight" />
+    <meta property="og:title" content="ShipSight | E-commerce Video Management & Packing Recorder" />
+    <meta property="og:description" content="E-commerce video management (VMS) for packing — barcode-linked recording." />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="/logo.png" />
+    <meta property="og:url" content="https://shipsight.in/" />
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="/logo.png" />
+    <script>
+      (function () {
+        var isVms = location.hostname.startsWith('vms.');
+        var title = isVms ? 'ShipSight VMS | Video Management for E-commerce' : 'ShipSight | E-commerce Video Management & Packing Recorder';
+        var desc = isVms ? 'Secure video management system for e-commerce packing workflows. Record, search, and share barcode-linked videos.' : 'E-commerce video management (VMS) for packing — barcode-linked recording.';
+        var keywords = 'vms, video management, ecom video management, shipsight, packing videos, barcode';
+        document.title = title;
+        function ensureMeta(selector, attr, value) {
+          var el = document.querySelector(selector);
+          if (!el) {
+            el = document.createElement('meta');
+            if (selector.indexOf('meta[name=') === 0) {
+              el.setAttribute('name', selector.match(/meta\[name=['"](.+?)['"]\]/)[1]);
+            } else if (selector.indexOf('meta[property=') === 0) {
+              el.setAttribute('property', selector.match(/meta\[property=['"](.+?)['"]\]/)[1]);
+            }
+            document.head.appendChild(el);
+          }
+          el.setAttribute(attr, value);
+        }
+        ensureMeta('meta[name="description"]', 'content', desc);
+        ensureMeta('meta[name="keywords"]', 'content', keywords);
+        ensureMeta('meta[name="robots"]', 'content', isVms && location.pathname !== '/' ? 'noindex,nofollow' : 'index,follow');
+        ensureMeta('meta[property="og:title"]', 'content', title);
+        ensureMeta('meta[property="og:description"]', 'content', desc);
+        ensureMeta('meta[property="og:url"]', 'content', location.href);
+        var canonical = document.querySelector('link[rel="canonical"]');
+        if (!canonical) {
+          canonical = document.createElement('link');
+          canonical.setAttribute('rel', 'canonical');
+          document.head.appendChild(canonical);
+        }
+        canonical.setAttribute('href', location.origin + location.pathname);
+      })();
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "name": "ShipSight",
+            "url": "https://shipsight.in/",
+            "logo": "https://shipsight.in/logo.png"
+          },
+          {
+            "@type": "SoftwareApplication",
+            "name": "ShipSight VMS",
+            "applicationCategory": "BusinessApplication",
+            "operatingSystem": "Web",
+            "url": "https://shipsight.in/",
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+          }
+        ]
+      }
+    </script>
   </head>
 
   <body>
