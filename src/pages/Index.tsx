@@ -556,7 +556,14 @@ const Index = ({ onLogout }: IndexProps) => {
       if (controlsRef.current) {
         await controlsRef.current.stop();
         const started = await controlsRef.current.startWithBarcode(normalized);
-        if (started) setCurrentRecordingBarcode(normalized);
+        if (started) {
+          setCurrentRecordingBarcode(normalized);
+          if (recordMode === "reverse") {
+            setReverseIndex(0);
+            setReverseCaptured({});
+            setReverseImages({});
+          }
+        }
         return started;
       }
       return false;
@@ -566,7 +573,14 @@ const Index = ({ onLogout }: IndexProps) => {
     if (!ok) return false;
     if (controlsRef.current) {
       const started = await controlsRef.current.startWithBarcode(normalized);
-      if (started) setCurrentRecordingBarcode(normalized);
+      if (started) {
+        setCurrentRecordingBarcode(normalized);
+        if (recordMode === "reverse") {
+          setReverseIndex(0);
+          setReverseCaptured({});
+          setReverseImages({});
+        }
+      }
       return started;
     }
     return false;
@@ -790,6 +804,11 @@ const Index = ({ onLogout }: IndexProps) => {
                         }
                       } else {
                         setCurrentRecordingBarcode("");
+                        if (recordMode === "reverse") {
+                          setReverseIndex(0);
+                          setReverseCaptured({});
+                          setReverseImages({});
+                        }
                         void beepStop();
                       }
                     }}
