@@ -4,9 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" href="/logo.png" type="image/png" />
+    <link rel="shortcut icon" href="/logo.png" type="image/png" />
+    <link rel="apple-touch-icon" href="/logo.png" />
+    <link rel="icon" sizes="192x192" href="/logo.png" />
+    <link rel="icon" sizes="32x32" href="/logo.png" />
     <title>ShipSight | E-commerce Video Management & Packing Recorder</title>
     <meta name="description" content="E-commerce video management (VMS) for packing — barcode-linked recording." />
-    <meta name="keywords" content="vms, video management, ecom video management, shipsight, packing videos, barcode" />
+    <meta name="keywords" content="shipsight, video management system, e-commerce video management, vms, packing videos, barcode scanning, shipment tracking, order verification, packaging quality control, fulfillment operations, warehouse recording, proof of packing, packing recorder, logistics videos, reverse packing photos, barcode-linked recording, packing station, ecommerce logistics, dispatch verification" />
     <meta name="robots" content="index,follow" />
     <meta name="author" content="ShipSight" />
     <link rel="canonical" href="https://shipsight.in/" />
@@ -25,7 +29,9 @@
         var isVms = location.hostname.startsWith('vms.');
         var title = isVms ? 'ShipSight VMS | Video Management for E-commerce' : 'ShipSight | E-commerce Video Management & Packing Recorder';
         var desc = isVms ? 'Secure video management system for e-commerce packing workflows. Record, search, and share barcode-linked videos.' : 'E-commerce video management (VMS) for packing — barcode-linked recording.';
-        var keywords = 'vms, video management, ecom video management, shipsight, packing videos, barcode';
+        var keywords = isVms
+          ? 'shipsight vms, video management, barcode-linked videos, packing workflows, shipment verification, ecommerce warehouse, fulfillment quality assurance, packing station recorder, order id video, camera recording, logistics management'
+          : 'shipsight, video management system, e-commerce video management, vms, packing videos, barcode scanning, shipment tracking, order verification, packaging quality control, fulfillment operations, warehouse recording, proof of packing, packing recorder, logistics videos, reverse packing photos, barcode-linked recording, packing station, ecommerce logistics, dispatch verification';
         document.title = title;
         function ensureMeta(selector, attr, value) {
           var el = document.querySelector(selector);

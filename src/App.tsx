@@ -87,6 +87,9 @@ const App = () => {
                 const desc = isVms
                   ? "Secure video management system for e-commerce packing workflows. Record, search, and share barcode-linked videos."
                   : "E-commerce video management (VMS) for packing — barcode-linked recording.";
+                const keywords = isVms
+                  ? "shipsight vms, video management, barcode-linked videos, packing workflows, shipment verification, ecommerce warehouse, fulfillment quality assurance, packing station recorder, order id video, camera recording, logistics management"
+                  : "shipsight, video management system, e-commerce video management, vms, packing videos, barcode scanning, shipment tracking, order verification, packaging quality control, fulfillment operations, warehouse recording, proof of packing, packing recorder, logistics videos, reverse packing photos, barcode-linked recording, packing station, ecommerce logistics, dispatch verification";
                 const robots = isVms && location.pathname !== "/" ? "noindex,nofollow" : "index,follow";
                 const setMeta = (selector: string, attr: string, value: string) => {
                   const el = document.querySelector(selector) as HTMLMetaElement | null;
@@ -94,12 +97,26 @@ const App = () => {
                 };
                 document.title = title;
                 setMeta('meta[name="description"]', "content", desc);
+                setMeta('meta[name="keywords"]', "content", keywords);
                 setMeta('meta[name="robots"]', "content", robots);
                 setMeta('meta[property="og:title"]', "content", title);
                 setMeta('meta[property="og:description"]', "content", desc);
                 setMeta('meta[property="og:url"]', "content", window.location.href);
                 const canonical = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
                 if (canonical) canonical.setAttribute("href", window.location.origin + location.pathname);
+                const ensureIcon = (rel: string) => {
+                  let link = document.querySelector(`link[rel="${rel}"]`) as HTMLLinkElement | null;
+                  if (!link) {
+                    link = document.createElement("link");
+                    link.setAttribute("rel", rel);
+                    document.head.appendChild(link);
+                  }
+                  link.setAttribute("href", "/logo.png");
+                  link.setAttribute("type", "image/png");
+                };
+                ensureIcon("icon");
+                ensureIcon("shortcut icon");
+                ensureIcon("apple-touch-icon");
               }, [location.pathname]);
               return null;
             };
