@@ -704,6 +704,26 @@ const Index = ({ onLogout }: IndexProps) => {
       upsertExcelRow(monthDirHandle ?? dirHandle, bc, recordMode, { end: entry.time, file: path }).catch(() => {});
       return;
     }
+    if (entry.message.startsWith("Recording downloaded:")) {
+      const fname = entry.message.replace("Recording downloaded:", "").trim();
+      const bc = currentRecordingBarcode || fname.replace(/\.(mp4|webm)$/i, "").trim();
+      const path = recordMode === "reverse"
+        ? `/${monthName}/reverse/${bc}/${fname}`
+        : `/${monthName}/forward/${fname}`;
+      upsertExcelRow(monthDirHandle ?? dirHandle, bc, recordMode, { end: entry.time, file: path }).catch(() => {});
+      return;
+    }
+    if (entry.message.startsWith("Photo saved:")) {
+      const p = entry.message.replace("Photo saved:", "").trim();
+      const parts = p.split("/");
+      let bc = currentRecordingBarcode;
+      if (!bc && parts.length >= 2) bc = parts[1];
+      const path = `/${monthName}/${p}`;
+      if (bc) {
+        upsertExcelRow(monthDirHandle ?? dirHandle, bc, "reverse", { end: entry.time, file: path }).catch(() => {});
+      }
+      return;
+    }
   };
 
   // Removed auto-switch on typing; recording actions now happen only on Enter or Start button
@@ -791,7 +811,7 @@ const Index = ({ onLogout }: IndexProps) => {
                   isRecording={isRecording}
                 />
                 <div className="mt-4">
-                  <RecordingControls 
+                <RecordingControls 
                     ref={controlsRef}
                     barcode={barcode}
                     onRecordingStateChange={(rec) => { 
@@ -803,7 +823,6 @@ const Index = ({ onLogout }: IndexProps) => {
                           setShowReversePanel(false);
                         }
                       } else {
-                        setCurrentRecordingBarcode("");
                         if (recordMode === "reverse") {
                           setReverseIndex(0);
                           setReverseCaptured({});
