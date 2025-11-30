@@ -81,6 +81,37 @@ export const RecordingControls = forwardRef<RecordingControlsRef, RecordingContr
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const waitForVideoReady = (video: HTMLVideoElement): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+        resolve();
+        return;
+      }
+      const onReady = () => {
+        if (video.videoWidth > 0 && video.videoHeight > 0) {
+          cleanup();
+          resolve();
+        }
+      };
+      const cleanup = () => {
+        video.removeEventListener('loadeddata', onReady);
+        video.removeEventListener('playing', onReady);
+      };
+      video.addEventListener('loadeddata', onReady, { once: true });
+      video.addEventListener('playing', onReady, { once: true });
+      const t = setTimeout(() => {
+        cleanup();
+        if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+          resolve();
+        } else {
+          reject(new Error('not-ready'));
+        }
+      }, 2000);
+      const stop = () => { clearTimeout(t); cleanup(); };
+      video.addEventListener('error', stop, { once: true });
+    });
+  };
+
   const startRecording = async (codeOverride?: string, skipReserve?: boolean): Promise<boolean> => {
     if (!enabled) {
       toast.error("Please select an output folder first");
@@ -107,12 +138,42 @@ export const RecordingControls = forwardRef<RecordingControlsRef, RecordingContr
           await directoryHandle.getDirectoryHandle("reverse", { create: true });
         } catch {}
       }
-      const userStream = await navigator.mediaDevices.getUserMedia({ 
-        video: { width: { ideal: 3840 }, height: { ideal: 2160 }, frameRate: { ideal: 60 } }, 
-        audio: false 
-      });
-      userStreamRef.current = userStream;
-      
+
+      // @ts-ignore
+      const externalVideo: HTMLVideoElement | null = (typeof window !== "undefined" ? (window as any).__shipsightCameraVideo : null) || null;
+      let videoEl = externalVideo ?? null;
+      if (!videoEl) {
+        const userStream = await navigator.mediaDevices.getUserMedia({ 
+          video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } }, 
+          audio: false 
+        });
+        userStreamRef.current = userStream;
+        videoEl = document.createElement("video");
+        videoEl.srcObject = userStream;
+        videoEl.muted = true;
+        videoEl.playsInline = true;
+        try { await videoEl.play(); } catch {}
+        try { await waitForVideoReady(videoEl); } catch {}
+      } else {
+        try { await videoEl.play(); } catch {}
+        let ready = true;
+        try { await waitForVideoReady(videoEl); } catch { ready = false; }
+        if (!ready) {
+          const userStream = await navigator.mediaDevices.getUserMedia({ 
+            video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } }, 
+            audio: false 
+          });
+          userStreamRef.current = userStream;
+          const v = document.createElement("video");
+          v.srcObject = userStream;
+          v.muted = true;
+          v.playsInline = true;
+          try { await v.play(); } catch {}
+          try { await waitForVideoReady(v); } catch {}
+          videoEl = v;
+        }
+      }
+
       // Prefer MP4 when available, otherwise fall back to WebM (no audio)
       const candidates = [
         "video/mp4;codecs=h264",
@@ -140,35 +201,17 @@ export const RecordingControls = forwardRef<RecordingControlsRef, RecordingContr
       const isMp4 = selected?.includes("mp4");
       const vbr = isMp4 ? 20_000_000 : 12_000_000;
       const options: MediaRecorderOptions = { mimeType: selected, videoBitsPerSecond: vbr };
-      const videoEl = document.createElement("video");
-      videoEl.srcObject = userStream;
-      videoEl.muted = true;
-      videoEl.playsInline = true;
-      await videoEl.play();
-      const track = userStream.getVideoTracks()[0];
-      try {
-        const caps: any = typeof track.getCapabilities === "function" ? track.getCapabilities() : {};
-        let targetWidth = 1920;
-        let targetHeight = 1080;
-        let targetFps = 30;
-        if (caps?.width?.max && caps?.height?.max) {
-          if (caps.width.max >= 1920 && caps.height.max >= 1080) {
-            targetWidth = 1920;
-            targetHeight = 1080;
-          } else {
-            targetWidth = caps.width.max;
-            targetHeight = caps.height.max;
-          }
-        }
-        if (caps?.frameRate?.max) {
-          targetFps = Math.max(30, Math.min(60, caps.frameRate.max));
-        }
-        await track.applyConstraints({ width: targetWidth, height: targetHeight, frameRate: targetFps });
-      } catch {}
-      const settings = typeof track.getSettings === "function" ? track.getSettings() : {} as any;
-      const w = ((settings.width as number) ?? videoEl.videoWidth) || 1920;
-      const h = ((settings.height as number) ?? videoEl.videoHeight) || 1080;
-      const fps = (settings.frameRate as number) ?? 30;
+      let w = videoEl.videoWidth || 1920;
+      let h = videoEl.videoHeight || 1080;
+      let fps = 30;
+      // If we created a local stream, prefer its track settings
+      if (!externalVideo && userStreamRef.current) {
+        const track = userStreamRef.current.getVideoTracks()[0];
+        const settings = typeof track.getSettings === "function" ? track.getSettings() : {} as any;
+        w = ((settings.width as number) ?? videoEl.videoWidth) || 1920;
+        h = ((settings.height as number) ?? videoEl.videoHeight) || 1080;
+        fps = (settings.frameRate as number) ?? 30;
+      }
       const canvas = document.createElement("canvas");
       canvas.width = w;
       canvas.height = h;
