@@ -60,6 +60,7 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(({
       setHasCamera(true);
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
+        try { (window as any).__shipsightCameraVideo = videoRef.current; } catch {}
       }
       toast.success("Camera connected");
 
