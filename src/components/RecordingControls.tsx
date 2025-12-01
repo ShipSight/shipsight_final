@@ -12,14 +12,19 @@ interface RecordingControlsProps {
   directoryHandle?: any | null;
   onStartBarcode?: (code: string) => Promise<boolean>;
   subfolder?: "forward" | "reverse";
+  qualityScale?: number;
+  clarityPreset?: "original" | "crisp" | "soft" | "medium" | "strong";
 }
 
 export interface LogEntry {
   time: string;
   status: "info" | "success" | "error";
   message: string;
-  imageUrl?: string; // optional thumbnail for snapshots
-  tag?: string; // optional label such as Front/Back/Left/Right/Top/Bottom
+  imageUrl?: string;
+  tag?: string;
+  mode?: "forward" | "reverse";
+  barcode?: string;
+  fileName?: string;
 }
 
 export type RecordingControlsRef = {
@@ -36,6 +41,8 @@ export const RecordingControls = forwardRef<RecordingControlsRef, RecordingContr
   directoryHandle,
   onStartBarcode,
   subfolder,
+  qualityScale = 1,
+  clarityPreset = "original",
 }: RecordingControlsProps, ref) => {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingStartTime, setRecordingStartTime] = useState<Date | null>(null);
@@ -144,7 +151,7 @@ export const RecordingControls = forwardRef<RecordingControlsRef, RecordingContr
       let videoEl = externalVideo ?? null;
       if (!videoEl) {
         const userStream = await navigator.mediaDevices.getUserMedia({ 
-          video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } }, 
+          video: { width: { ideal: Math.max(320, Math.round(1920 * qualityScale)) }, height: { ideal: Math.max(240, Math.round(1080 * qualityScale)) }, frameRate: { ideal: 30 } }, 
           audio: false 
         });
         userStreamRef.current = userStream;
@@ -154,13 +161,19 @@ export const RecordingControls = forwardRef<RecordingControlsRef, RecordingContr
         videoEl.playsInline = true;
         try { await videoEl.play(); } catch {}
         try { await waitForVideoReady(videoEl); } catch {}
+        try {
+          const r = (videoEl as any).requestVideoFrameCallback;
+          if (typeof r === "function") {
+            await new Promise<void>((res) => r.call(videoEl, () => res()));
+          }
+        } catch {}
       } else {
         try { await videoEl.play(); } catch {}
         let ready = true;
         try { await waitForVideoReady(videoEl); } catch { ready = false; }
         if (!ready) {
           const userStream = await navigator.mediaDevices.getUserMedia({ 
-            video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } }, 
+            video: { width: { ideal: Math.max(320, Math.round(1920 * qualityScale)) }, height: { ideal: Math.max(240, Math.round(1080 * qualityScale)) }, frameRate: { ideal: 30 } }, 
             audio: false 
           });
           userStreamRef.current = userStream;
@@ -170,6 +183,12 @@ export const RecordingControls = forwardRef<RecordingControlsRef, RecordingContr
           v.playsInline = true;
           try { await v.play(); } catch {}
           try { await waitForVideoReady(v); } catch {}
+          try {
+            const r = (v as any).requestVideoFrameCallback;
+            if (typeof r === "function") {
+              await new Promise<void>((res) => r.call(v, () => res()));
+            }
+          } catch {}
           videoEl = v;
         }
       }
@@ -212,13 +231,31 @@ export const RecordingControls = forwardRef<RecordingControlsRef, RecordingContr
         h = ((settings.height as number) ?? videoEl.videoHeight) || 1080;
         fps = (settings.frameRate as number) ?? 30;
       }
+      if (externalVideo && videoEl.srcObject) {
+        try {
+          const track = (videoEl.srcObject as MediaStream).getVideoTracks()[0];
+          const settings = typeof track.getSettings === "function" ? track.getSettings() : ({} as any);
+          w = ((settings.width as number) ?? w) || w;
+          h = ((settings.height as number) ?? h) || h;
+          fps = (settings.frameRate as number) ?? fps;
+        } catch {}
+      }
       const canvas = document.createElement("canvas");
       canvas.width = w;
       canvas.height = h;
       const ctx = canvas.getContext("2d")!;
       // @ts-ignore
       ctx.imageSmoothingEnabled = false;
+      const filterForClarity = (preset: "original" | "crisp" | "soft" | "medium" | "strong"): string => {
+        if (preset === "soft") return "blur(1px)";
+        if (preset === "medium") return "blur(2px)";
+        if (preset === "strong") return "blur(4px)";
+        if (preset === "crisp") return "contrast(1.15) saturate(1.1) brightness(1.05)";
+        return "none";
+      };
       const draw = () => {
+        // @ts-ignore
+        ctx.filter = filterForClarity(clarityPreset);
         ctx.drawImage(videoEl, 0, 0, w, h);
         const codeText = currentCode;
         const timeText = new Date().toLocaleString();
@@ -295,7 +332,7 @@ export const RecordingControls = forwardRef<RecordingControlsRef, RecordingContr
           document.body.appendChild(a);
           a.click();
           a.remove();
-          setTimeout(() => URL.revokeObjectURL(url), 2000);
+          setTimeout(() => URL.revokeObjectURL(url), 5000);
         };
 
         let targetDir = directoryHandle;
@@ -355,7 +392,10 @@ export const RecordingControls = forwardRef<RecordingControlsRef, RecordingContr
             onLogEntry({
               time: new Date().toLocaleTimeString(),
               status: "success",
-              message: `Recording saved: ${finalName}`
+              message: `Recording saved: ${finalName}`,
+              mode: (subfolder ?? "forward"),
+              barcode: currentCode,
+              fileName: finalName,
             });
             toast.success("Recording saved to selected folder");
             return true;
@@ -378,7 +418,10 @@ export const RecordingControls = forwardRef<RecordingControlsRef, RecordingContr
           onLogEntry({
             time: new Date().toLocaleTimeString(),
             status: "info",
-            message: `Recording downloaded: ${finalName}`
+            message: `Recording downloaded: ${finalName}`,
+            mode: (subfolder ?? "forward"),
+            barcode: currentCode,
+            fileName: finalName,
           });
           toast.message("Recording downloaded to your default folder");
         }
@@ -399,7 +442,9 @@ export const RecordingControls = forwardRef<RecordingControlsRef, RecordingContr
         onLogEntry({
           time: new Date().toLocaleTimeString(),
           status: "success",
-          message: `Recording stopped for barcode: ${currentCode}`
+          message: `Recording stopped for barcode: ${currentCode}`,
+          mode: (subfolder ?? "forward"),
+          barcode: currentCode,
         });
         if (stopResolveRef.current) {
           stopResolveRef.current();
@@ -416,7 +461,9 @@ export const RecordingControls = forwardRef<RecordingControlsRef, RecordingContr
       onLogEntry({
         time: new Date().toLocaleTimeString(),
         status: "info",
-        message: `Started recording for barcode: ${currentCode}`
+        message: `Started recording for barcode: ${currentCode}`,
+        mode: (subfolder ?? "forward"),
+        barcode: currentCode,
       });
       return true;
     } catch (error) {
