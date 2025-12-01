@@ -52,6 +52,8 @@ const Index = ({ onLogout }: IndexProps) => {
   
   const [recordMode, setRecordMode] = useState<"forward" | "reverse">("forward");
   const [folderInitDone, setFolderInitDone] = useState(false);
+  const [qualityScale, setQualityScale] = useState<number>(1);
+  const [clarityPreset, setClarityPreset] = useState<"original" | "crisp" | "soft" | "medium" | "strong">("original");
 
   const excelFileName = "session.xlsx";
   const [monthName, setMonthName] = useState<string>("");
@@ -148,7 +150,6 @@ const Index = ({ onLogout }: IndexProps) => {
         XLSX.utils.book_append_sheet(wb, ws, sheetName);
       }
       const existingRows = XLSX.utils.sheet_to_json(ws) as any[];
-      const idx = existingRows.findIndex((r) => String(r["OrderID"]).trim() === orderId.trim() && String(r["Mode"]).trim().toLowerCase() === mode);
       const now = new Date();
       const d = updates.date ?? now.toLocaleDateString();
       const rowUpdate: any = {
@@ -159,18 +160,31 @@ const Index = ({ onLogout }: IndexProps) => {
         Mode: mode,
         File: updates.file ?? "",
       };
-      if (idx >= 0) {
-        const current = existingRows[idx];
-        existingRows[idx] = {
-          Date: current["Date"] || rowUpdate.Date,
-          StartTime: rowUpdate.StartTime || current["StartTime"] || "",
-          EndTime: rowUpdate.EndTime || current["EndTime"] || "",
-          OrderID: current["OrderID"] || orderId,
-          Mode: current["Mode"] || mode,
-          File: rowUpdate.File || current["File"] || "",
-        };
-      } else {
+      const hasStart = typeof updates.start === "string" && updates.start.length > 0;
+      const hasEnd = typeof updates.end === "string" && updates.end.length > 0;
+      const hasFile = typeof updates.file === "string" && updates.file.length > 0;
+      if (hasStart && !hasEnd && !hasFile) {
         existingRows.push(rowUpdate);
+      } else {
+        let targetIdx = -1;
+        for (let i = existingRows.length - 1; i >= 0; i--) {
+          const r = existingRows[i];
+          const same = String(r["OrderID"]).trim() === orderId.trim() && String(r["Mode"]).trim().toLowerCase() === mode;
+          if (same) { targetIdx = i; break; }
+        }
+        if (targetIdx >= 0) {
+          const current = existingRows[targetIdx];
+          existingRows[targetIdx] = {
+            Date: current["Date"] || rowUpdate.Date,
+            StartTime: current["StartTime"] || rowUpdate.StartTime || "",
+            EndTime: rowUpdate.EndTime || current["EndTime"] || "",
+            OrderID: current["OrderID"] || orderId,
+            Mode: current["Mode"] || mode,
+            File: rowUpdate.File || current["File"] || "",
+          };
+        } else {
+          existingRows.push(rowUpdate);
+        }
       }
       const newWs = XLSX.utils.json_to_sheet(existingRows, { header: ["Date", "StartTime", "EndTime", "OrderID", "Mode", "File"] });
       wb.Sheets[sheetName] = newWs;
@@ -267,16 +281,6 @@ const Index = ({ onLogout }: IndexProps) => {
       return;
     }
     const code = barcode.trim();
-    setLogEntries(prev => [
-      ...prev,
-      {
-        time: new Date().toLocaleTimeString(),
-        status: "success",
-        message: opts?.retake ? "Retake snapshot captured" : "Snapshot captured",
-        tag,
-        imageUrl: dataUrl,
-      },
-    ]);
     toast.success(`${opts?.retake ? 'Retake ' : ''}${tag} photo captured`);
 
     // Store image for ZIP export
@@ -289,8 +293,6 @@ const Index = ({ onLogout }: IndexProps) => {
           time: new Date().toLocaleTimeString(),
           status: savedName ? "success" : "error",
           message: savedName ? `Photo saved: reverse/${code}/${savedName}` : `Failed to save photo for ${tag}`,
-          tag,
-          imageUrl: dataUrl,
         },
       ]);
     } catch { void 0; }
@@ -424,34 +426,28 @@ const Index = ({ onLogout }: IndexProps) => {
 
   const handleFolderSelect = async () => {
     try {
-      // @ts-ignore - showDirectoryPicker is not fully supported in TS yet
+      // @ts-expect-error showDirectoryPicker not typed in TypeScript DOM lib yet
       const directoryHandle = await window.showDirectoryPicker();
       setDirHandle(directoryHandle);
       setOutputFolder(directoryHandle.name);
       const mName = computeMonthName();
       setMonthName(mName);
       let mHandle: any = null;
-      try { mHandle = await directoryHandle.getDirectoryHandle(mName, { create: true }); } catch {}
+      try { mHandle = await directoryHandle.getDirectoryHandle(mName, { create: true }); } catch (e) { void e; }
       if (mHandle) setMonthDirHandle(mHandle);
       try {
         localStorage.setItem('shipsight:lastOutputFolderName', directoryHandle.name);
-        document.cookie = `shipsight_last_folder=${encodeURIComponent(directoryHandle.name)}; path=/; max-age=31536000`;
-      } catch {}
+      } catch (e) { void e; }
       await saveDirHandleIDB(directoryHandle);
       try {
         const base = mHandle ?? directoryHandle;
         await base.getDirectoryHandle("forward", { create: true });
         await base.getDirectoryHandle("reverse", { create: true });
-      } catch { void 0; }
+      } catch (e) { void e; }
 
       await ensureExcelFile(mHandle ?? directoryHandle);
       await loadExcelLog(mHandle ?? directoryHandle);
       toast.success(`Output folder selected: ${directoryHandle.name}`);
-      setLogEntries(prev => [...prev, {
-        time: new Date().toLocaleTimeString(),
-        status: "info",
-        message: `Output folder set to: ${directoryHandle.name}`
-      }]);
     } catch (error) {
       if ((error as Error).name !== "AbortError") {
         toast.error("Failed to select folder");
@@ -474,9 +470,6 @@ const Index = ({ onLogout }: IndexProps) => {
           const fileInfo = r.File ? ` — ${r.File}` : "";
           historicalEntries.push({ time: r.StartTime || new Date().toLocaleTimeString(), status: "info", message: `Order ${code}: ${modeInfo}${fileInfo}${timesInfo ? ` (${timesInfo})` : ""}` });
         }
-      }
-      if (historicalEntries.length > 0) {
-        setLogEntries(prev => [...historicalEntries, ...prev]);
       }
       setLog({ version: 1, updatedAt: new Date().toISOString(), barcodes: usedBarcodes, events: historicalEntries });
     } catch (e) {
@@ -502,16 +495,18 @@ const Index = ({ onLogout }: IndexProps) => {
       toast.error("Barcode is empty");
       return false;
     }
-    let usedForward = false;
-    let usedReverse = false;
-    try {
-      if (dirHandle) {
-        const base = monthDirHandle ?? dirHandle;
-        const rows = await readExcelRows(base);
-        usedForward = rows.some((r) => String(r.OrderID).trim() === normalized && String(r.Mode).trim().toLowerCase() === "forward");
-        usedReverse = rows.some((r) => String(r.OrderID).trim() === normalized && String(r.Mode).trim().toLowerCase() === "reverse");
-      }
-    } catch {}
+    let usedForward = log.events.some((e) => (e.barcode?.trim() === normalized) && (e.mode === "forward") && /Recording saved:|Recording downloaded:|Reserved barcode:/i.test(e.message));
+    let usedReverse = log.events.some((e) => (e.barcode?.trim() === normalized) && (e.mode === "reverse") && /Photo saved:|Reserved barcode:/i.test(e.message));
+    if (!usedForward || !usedReverse) {
+      try {
+        if (dirHandle) {
+          const base = monthDirHandle ?? dirHandle;
+          const rows = await readExcelRows(base);
+          usedForward = usedForward || rows.some((r) => String(r.OrderID).trim() === normalized && String(r.Mode).trim().toLowerCase() === "forward");
+          usedReverse = usedReverse || rows.some((r) => String(r.OrderID).trim() === normalized && String(r.Mode).trim().toLowerCase() === "reverse");
+        }
+      } catch (e) { void e; }
+    }
     if (mode === "forward" && usedForward) {
       toast.error("Barcode already used for forward recording");
       return false;
@@ -522,12 +517,6 @@ const Index = ({ onLogout }: IndexProps) => {
     }
     const updated: LogState = { version: 1, updatedAt: new Date().toISOString(), barcodes: [...log.barcodes, normalized], events: log.events };
     setLog(updated);
-    
-    setLogEntries(prev => [...prev, {
-      time: new Date().toLocaleTimeString(),
-      status: "info",
-      message: `Reserved barcode: ${normalized}`
-    }]);
     return true;
   };
 
@@ -638,26 +627,32 @@ const Index = ({ onLogout }: IndexProps) => {
         a.click();
       } else {
         const wb = XLSX.utils.book_new();
-        const header = [["Date", "StartTime", "EndTime", "OrderID", "Mode"]];
-        const grouped: Record<string, { Date: string; StartTime: string; EndTime: string; OrderID: string; Mode: string }> = {};
+        const header = [["Date", "StartTime", "EndTime", "OrderID", "Mode", "File"]];
+        const grouped: Record<string, { Date: string; StartTime: string; EndTime: string; OrderID: string; Mode: string; File: string }> = {};
         for (const e of log.events) {
-          const mOrder = e.message.match(/barcode:\s*(\S+)/i) || e.message.match(/Order\s+(\S+):/i);
-          const order = mOrder ? mOrder[1] : "";
-          const mode = e.message.toLowerCase().includes("reverse") ? "reverse" : "forward";
+          const order = (e.barcode ?? (e.message.match(/barcode:\s*(\S+)/i)?.[1] || e.message.match(/Order\s+(\S+):/i)?.[1] || "")).trim();
+          const mode = (e.mode ?? (e.message.toLowerCase().includes("reverse") ? "reverse" : "forward")) as "forward" | "reverse";
           const key = `${order}|${mode}`;
-          if (!grouped[key]) grouped[key] = { Date: new Date().toLocaleDateString(), StartTime: "", EndTime: "", OrderID: order, Mode: mode };
+          if (!grouped[key]) grouped[key] = { Date: new Date().toLocaleDateString(), StartTime: "", EndTime: "", OrderID: order, Mode: mode, File: "" };
           if (/Started recording for barcode:/i.test(e.message)) {
             grouped[key].StartTime = e.time;
             grouped[key].Date = new Date().toLocaleDateString();
           }
           if (e.message.startsWith("Recording saved:")) {
             grouped[key].EndTime = e.time;
+            const fname = e.fileName ?? e.message.replace("Recording saved:", "").trim();
+            grouped[key].File = fname;
           }
           if (e.message.startsWith("ZIP saved:")) {
             grouped[key].EndTime = e.time;
+            grouped[key].File = e.message.replace("ZIP saved:", "").trim();
+          }
+          if (e.message.startsWith("Photo saved:")) {
+            grouped[key].EndTime = e.time;
+            grouped[key].File = e.message.replace("Photo saved:", "").trim();
           }
         }
-        const rows = Object.values(grouped).map((r) => [r.Date, r.StartTime, r.EndTime, r.OrderID, r.Mode]);
+        const rows = Object.values(grouped).map((r) => [r.Date, r.StartTime, r.EndTime, r.OrderID, r.Mode, r.File]);
         const ws = XLSX.utils.aoa_to_sheet([...header, ...rows]);
         XLSX.utils.book_append_sheet(wb, ws, "Log");
         const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
@@ -675,54 +670,58 @@ const Index = ({ onLogout }: IndexProps) => {
   };
 
   const handleLogEntry = (entry: LogEntry) => {
-    setLogEntries(prev => [...prev, entry]);
     const updated: LogState = { ...log, events: [...log.events, entry], updatedAt: new Date().toISOString() };
     setLog(updated);
-    const iso = new Date().toISOString();
-    // Simplified log lines: START / STOP / SAVED only
+    let uiEntry: LogEntry | null = null;
     if (/Started recording for barcode:/i.test(entry.message)) {
       const m = entry.message.match(/Started recording for barcode:\s*(\S+)/i);
       if (m) {
-        setCurrentRecordingBarcode(m[1]);
-        upsertExcelRow(monthDirHandle ?? dirHandle, m[1], recordMode, { date: new Date().toLocaleDateString(), start: entry.time }).catch(() => {});
+        const bc = entry.barcode ?? m[1];
+        const mode = entry.mode ?? recordMode;
+        setCurrentRecordingBarcode(bc);
+        upsertExcelRow(monthDirHandle ?? dirHandle, bc, mode, { date: new Date().toLocaleDateString(), start: entry.time }).catch(() => {});
+        uiEntry = { time: entry.time, status: "info", message: `Start: ${mode} ${bc}` } as LogEntry;
       }
-      return;
-    }
-    if (/Recording stopped for barcode:/i.test(entry.message)) {
+    } else if (/Recording stopped for barcode:/i.test(entry.message)) {
       const m = entry.message.match(/Recording stopped for barcode:\s*(\S+)/i);
       if (m) {
-        upsertExcelRow(monthDirHandle ?? dirHandle, m[1], recordMode, { end: entry.time }).catch(() => {});
+        const bc = entry.barcode ?? m[1];
+        uiEntry = { time: entry.time, status: "info", message: `Stop: ${bc}` } as LogEntry;
       }
-      return;
-    }
-    if (entry.message.startsWith("Recording saved:")) {
-      const fname = entry.message.replace("Recording saved:", "").trim();
-      const bc = currentRecordingBarcode || fname.replace(/\.(mp4|webm)$/i, "").trim();
-      const path = recordMode === "reverse"
+    } else if (entry.message.startsWith("Recording saved:")) {
+      const fname = (entry.fileName ?? entry.message.replace("Recording saved:", "").trim());
+      let bc = (entry.barcode ?? currentRecordingBarcode) || fname.replace(/\.(mp4|webm)$/i, "").trim();
+      const m = fname.match(/^(.+?)(?:_\d+)?\.(mp4|webm)$/i);
+      if (!entry.barcode && m) { bc = m[1]; }
+      const mode = entry.mode ?? recordMode;
+      const path = mode === "reverse"
         ? `/${monthName}/reverse/${bc}/${fname}`
         : `/${monthName}/forward/${fname}`;
-      upsertExcelRow(monthDirHandle ?? dirHandle, bc, recordMode, { end: entry.time, file: path }).catch(() => {});
-      return;
-    }
-    if (entry.message.startsWith("Recording downloaded:")) {
-      const fname = entry.message.replace("Recording downloaded:", "").trim();
-      const bc = currentRecordingBarcode || fname.replace(/\.(mp4|webm)$/i, "").trim();
-      const path = recordMode === "reverse"
+      upsertExcelRow(monthDirHandle ?? dirHandle, bc, mode, { end: entry.time, file: path }).catch(() => {});
+      uiEntry = { time: entry.time, status: "success", message: `Saved: ${path}` } as LogEntry;
+    } else if (entry.message.startsWith("Recording downloaded:")) {
+      const fname = (entry.fileName ?? entry.message.replace("Recording downloaded:", "").trim());
+      let bc = (entry.barcode ?? currentRecordingBarcode) || fname.replace(/\.(mp4|webm)$/i, "").trim();
+      const m = fname.match(/^(.+?)(?:_\d+)?\.(mp4|webm)$/i);
+      if (!entry.barcode && m) { bc = m[1]; }
+      const mode = entry.mode ?? recordMode;
+      const path = mode === "reverse"
         ? `/${monthName}/reverse/${bc}/${fname}`
         : `/${monthName}/forward/${fname}`;
-      upsertExcelRow(monthDirHandle ?? dirHandle, bc, recordMode, { end: entry.time, file: path }).catch(() => {});
-      return;
-    }
-    if (entry.message.startsWith("Photo saved:")) {
+      upsertExcelRow(monthDirHandle ?? dirHandle, bc, mode, { end: entry.time, file: path }).catch(() => {});
+      uiEntry = { time: entry.time, status: "success", message: `Saved: ${path}` } as LogEntry;
+    } else if (entry.message.startsWith("Photo saved:")) {
       const p = entry.message.replace("Photo saved:", "").trim();
       const parts = p.split("/");
-      let bc = currentRecordingBarcode;
+      let bc = entry.barcode ?? currentRecordingBarcode;
       if (!bc && parts.length >= 2) bc = parts[1];
-      const path = `/${monthName}/${p}`;
       if (bc) {
-        upsertExcelRow(monthDirHandle ?? dirHandle, bc, "reverse", { end: entry.time, file: path }).catch(() => {});
+        upsertExcelRow(monthDirHandle ?? dirHandle, bc, "reverse", { end: entry.time }).catch(() => {});
+        uiEntry = { time: entry.time, status: "success", message: `Photo: ${p}` } as LogEntry;
       }
-      return;
+    }
+    if (uiEntry) {
+      setLogEntries(prev => [...prev, uiEntry!]);
     }
   };
 
@@ -799,12 +798,12 @@ const Index = ({ onLogout }: IndexProps) => {
         </header>
 
         {/* Main Content */}
-        <main className="container mx-auto px-6 py-6">
+        <main className="container mx-auto px-6 py-3" style={{ zoom: 0.9 }}>
           <div className="grid lg:grid-cols-3 gap-4">
             {/* Left Column - Barcode above Camera & Controls */}
-            <div className="lg:col-span-2 space-y-6">
+            <div className="lg:col-span-2 h-[calc(100vh-8rem)] flex flex-col gap-4">
               {/* Barcode Input (moved above camera) with integrated recording controls */}
-              <div className="bg-[var(--glass-medium)] backdrop-blur-2xl border border-[var(--glass-border)] rounded-3xl p-5 shadow-[var(--shadow-lg)]">
+              <div className="bg-[var(--glass-medium)] backdrop-blur-2xl border border-[var(--glass-border)] rounded-3xl p-4 shadow-[var(--shadow-lg)]">
                 <BarcodeInput 
                   onBarcodeChange={setBarcode} 
                   onSubmitBarcode={handleSubmitBarcode}
@@ -837,12 +836,14 @@ const Index = ({ onLogout }: IndexProps) => {
                     onStartBarcode={handleSubmitBarcode}
                     directoryHandle={monthDirHandle ?? dirHandle}
                     subfolder={recordMode}
+                    qualityScale={qualityScale}
+                    clarityPreset={clarityPreset}
                   />
                 </div>
               </div>
 
               {/* Camera Preview */}
-              <div className="bg-[var(--glass-medium)] backdrop-blur-2xl border border-[var(--glass-border)] rounded-3xl p-5 shadow-[var(--shadow-lg)] hover:shadow-[var(--shadow-glow)] transition-all duration-300 h-[calc(100vh-8rem)]">
+              <div className="bg-[var(--glass-medium)] backdrop-blur-2xl border border-[var(--glass-border)] rounded-3xl p-4 shadow-[var(--shadow-lg)] hover:shadow-[var(--shadow-glow)] transition-all duration-300 flex-1">
                 <CameraPreview 
                   ref={cameraRef}
                   enabled={Boolean(outputFolder)} 
@@ -851,6 +852,10 @@ const Index = ({ onLogout }: IndexProps) => {
                   directoryHandle={monthDirHandle ?? dirHandle}
                   recordMode={recordMode}
                   overlayText={currentRecordingBarcode}
+                  qualityScale={qualityScale}
+                  onQualityChange={setQualityScale}
+                  clarityPreset={clarityPreset}
+                  onClarityChange={setClarityPreset}
                 />
               </div>
 
@@ -882,7 +887,7 @@ const Index = ({ onLogout }: IndexProps) => {
 
             {/* Right Column - Session Log */}
             <div className="lg:col-span-1">
-              <div className="sticky top-20 h-[calc(100vh-8rem)]">
+              <div className="sticky top-16 h-[calc(100vh-8rem)]">
                 <div className="mb-4">
                   <Button 
                     variant="glass-white" 
@@ -894,7 +899,7 @@ const Index = ({ onLogout }: IndexProps) => {
                   </Button>
                 </div>
                 {showReversePanel && (
-                  <div className="bg-[var(--glass-medium)] backdrop-blur-md border border-[var(--glass-border)] rounded-3xl p-4 shadow-[var(--shadow-lg)] mb-4">
+                  <div className="bg-[var(--glass-medium)] backdrop-blur-md border border-[var(--glass-border)] rounded-3xl p-3 shadow-[var(--shadow-lg)] mb-4">
                     <div className="flex items-center justify-between mb-3">
                       <h3 className="text-sm font-semibold">Capture Reverse Photos</h3>
                       <span className="text-xs text-muted-foreground">Front, Back, Left, Right, Top, Bottom</span>
