@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
-import { Camera, RefreshCw, Download, Maximize2, CameraIcon, FlipHorizontal } from "lucide-react";
+import { Camera, RefreshCw, Download, FlipHorizontal, Contrast } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 
 interface CameraPreviewProps {
@@ -10,12 +11,16 @@ interface CameraPreviewProps {
   directoryHandle?: any | null;
   recordMode?: "forward" | "reverse";
   overlayText?: string;
+  qualityScale?: number;
+  onQualityChange?: (scale: number) => void;
+  clarityPreset?: "original" | "crisp" | "soft" | "medium" | "strong";
+  onClarityChange?: (preset: "original" | "crisp" | "soft" | "medium" | "strong") => void;
 }
 export type CameraPreviewRef = {
   captureSnapshot: () => string | null;
 };
 
-export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(({ enabled = true, isRecording = false, elapsedTime = 0, directoryHandle = null, recordMode = "forward", overlayText }: CameraPreviewProps, ref) => {
+export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(({ enabled = true, isRecording = false, elapsedTime = 0, directoryHandle = null, recordMode = "forward", overlayText, qualityScale = 1, onQualityChange, clarityPreset = "original", onClarityChange }: CameraPreviewProps, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const selectedDirHandle = (directoryHandle ?? (typeof window !== 'undefined' ? (window as any).__selectedDirectoryHandle : null)) ?? null;
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -23,6 +28,13 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(({
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | undefined>(undefined);
   const [isFlipped, setIsFlipped] = useState(false);
+  const filterForClarity = (preset: "original" | "crisp" | "soft" | "medium" | "strong"): string => {
+    if (preset === "soft") return "blur(1px)";
+    if (preset === "medium") return "blur(2px)";
+    if (preset === "strong") return "blur(4px)";
+    if (preset === "crisp") return "contrast(1.15) saturate(1.1) brightness(1.05)";
+    return "none";
+  };
 
   // Format elapsed time as MM:SS
   const formatElapsedTime = (seconds: number): string => {
@@ -33,7 +45,7 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(({
 
   useEffect(() => {
     if (enabled) {
-      initCamera(selectedDeviceId);
+      refreshCamera();
     } else {
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
@@ -51,8 +63,12 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(({
 
   const initCamera = async (deviceId?: string) => {
     try {
+      const targetW = Math.max(320, Math.round(1920 * qualityScale));
+      const targetH = Math.max(240, Math.round(1080 * qualityScale));
       const constraints: MediaStreamConstraints = {
-        video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "environment" },
+        video: deviceId
+          ? { deviceId: { exact: deviceId }, width: { ideal: targetW }, height: { ideal: targetH }, frameRate: { ideal: 30 } }
+          : { facingMode: "environment", width: { ideal: targetW }, height: { ideal: targetH }, frameRate: { ideal: 30 } },
         audio: false,
       };
       const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -61,6 +77,13 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(({
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
         try { (window as any).__shipsightCameraVideo = videoRef.current; } catch {}
+        try { await videoRef.current.play(); } catch {}
+        try {
+          const r = (videoRef.current as any).requestVideoFrameCallback;
+          if (typeof r === "function") {
+            await new Promise<void>((res) => r.call(videoRef.current, () => res()));
+          }
+        } catch {}
       }
       toast.success("Camera connected");
 
@@ -94,60 +117,6 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(({
     toast.success("Switched camera");
   };
 
-  const saveOrDownloadSnapshot = () => {
-    if (!videoRef.current) return;
-    const canvas = document.createElement("canvas");
-    canvas.width = videoRef.current.videoWidth;
-    canvas.height = videoRef.current.videoHeight;
-    const ctx = canvas.getContext("2d");
-    if (ctx) {
-      ctx.drawImage(videoRef.current, 0, 0);
-      canvas.toBlob((blob) => {
-        if (blob) {
-          const fname = `snapshot-${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
-          const saveToFolder = async (): Promise<boolean> => {
-            if (!selectedDirHandle) {
-              toast.error("Select an output folder to save photos");
-              return false;
-            }
-            try {
-              if (typeof selectedDirHandle.requestPermission === "function") {
-                const perm = await selectedDirHandle.requestPermission({ mode: "readwrite" });
-                if (perm !== "granted") {
-                  toast.error("Folder permission denied — cannot save photo");
-                  return false;
-                }
-              }
-              const fileHandle = await selectedDirHandle.getFileHandle(fname, { create: true });
-              const writable = await fileHandle.createWritable();
-              await writable.write(blob);
-              await writable.close();
-              toast.success("Photo saved to selected folder");
-              return true;
-            } catch (e) {
-              console.error("Save photo failed", e);
-              toast.error("Failed to save photo to selected folder");
-              return false;
-            }
-          };
-
-          saveToFolder().then((ok) => {
-            if (!ok) {
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = fname;
-              document.body.appendChild(a);
-              a.click();
-              a.remove();
-              setTimeout(() => URL.revokeObjectURL(url), 2000);
-              toast.message("Photo downloaded to your default folder");
-            }
-          });
-        }
-      });
-    }
-  };
 
   useImperativeHandle(ref, () => ({
     captureSnapshot: () => {
@@ -170,13 +139,25 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(({
     },
   }), []);
 
-  const toggleFullscreen = () => {
-    if (videoRef.current) {
-      if (videoRef.current.requestFullscreen) {
-        videoRef.current.requestFullscreen();
-      }
+  useEffect(() => {
+    refreshCamera();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (enabled) {
+      refreshCamera();
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qualityScale]);
+
+  useEffect(() => {
+    return () => {
+      try { (window as any).__shipsightCameraVideo = null; } catch {}
+    };
+  }, []);
+
+  
 
   return (
     <div className="space-y-5 h-full flex flex-col">
@@ -212,35 +193,42 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(({
               ))}
             </select>
           )}
-          <Button
-            variant="glass-white"
-            size="icon"
-            onClick={toggleFullscreen}
-            title="Fullscreen"
-            disabled={!enabled || !hasCamera}
-          >
-            <Maximize2 className="w-4 h-4" />
-          </Button>
-          <Button
-            variant="glass-white"
-            size="icon"
-            onClick={() => setIsFlipped((v) => !v)}
-            title="Flip Video"
-            disabled={!enabled || !hasCamera}
-          >
-            <FlipHorizontal className="w-4 h-4" />
-          </Button>
-          <Button
-            variant="glass-white"
-            size="icon"
-            onClick={saveOrDownloadSnapshot}
-            title="Capture Photo"
-            disabled={!enabled || !hasCamera || !isRecording || recordMode === "forward"}
-          >
-            <CameraIcon className="w-4 h-4" />
-          </Button>
+          <div className="w-40">
+            <Select
+              value={String(qualityScale)}
+              onValueChange={(val) => { const v = Number(val); if (onQualityChange) onQualityChange(v); }}
+            >
+              <SelectTrigger className="h-11 rounded-2xl bg-white/10 text-white border border-white/20 backdrop-blur-2xl px-3 text-sm shadow-lg">
+                <SelectValue placeholder="Quality" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={"1"}>Original</SelectItem>
+                <SelectItem value={"0.5"}>1/2</SelectItem>
+                <SelectItem value={"0.25"}>1/4</SelectItem>
+                <SelectItem value={"0.125"}>1/8</SelectItem>
+              </SelectContent>
+          </Select>
         </div>
+        <Button
+          variant="glass-white"
+          size="icon"
+          onClick={() => { if (onClarityChange) onClarityChange(clarityPreset === "crisp" ? "original" : "crisp"); }}
+          title="Crisp Mode"
+          disabled={!enabled || !hasCamera}
+        >
+          <Contrast className="w-4 h-4" />
+        </Button>
+        <Button
+          variant="glass-white"
+          size="icon"
+          onClick={() => setIsFlipped((v) => !v)}
+          title="Flip Video"
+          disabled={!enabled || !hasCamera}
+        >
+          <FlipHorizontal className="w-4 h-4" />
+        </Button>
       </div>
+    </div>
 
       <div className="relative overflow-hidden rounded-3xl border border-[var(--glass-border)] bg-black/60 backdrop-blur-sm shadow-[var(--shadow-lg)] flex-1">
         {hasCamera ? (
@@ -251,6 +239,7 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(({
               playsInline
               muted
               className={"w-full h-full object-cover " + (isFlipped ? "scale-x-[-1]" : "")}
+              style={{ filter: filterForClarity(clarityPreset) }}
             />
             {isRecording && (
               <div className="absolute top-4 left-4 flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-black/40 to-black/60 backdrop-blur-md border border-white/10 shadow-lg">
