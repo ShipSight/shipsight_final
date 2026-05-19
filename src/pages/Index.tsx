@@ -333,6 +333,7 @@ const Index = ({ onLogout }: IndexProps) => {
   const completeReverseCycle = async () => {
     toast.success("Reverse photo capture complete");
     if (isRecording && controlsRef.current) {
+      await new Promise((resolve) => setTimeout(resolve, 5000));
       await controlsRef.current.stop();
     }
     try {
