@@ -2,6 +2,7 @@ import { useState, useRef, forwardRef, useImperativeHandle, useEffect } from "re
 import { Circle, Square, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { webmToMp4 } from "@/lib/ffmpeg-transcode";
 
 interface RecordingControlsProps {
   barcode: string;
@@ -193,12 +194,13 @@ export const RecordingControls = forwardRef<RecordingControlsRef, RecordingContr
         }
       }
 
-      // Prefer MP4 when available, otherwise fall back to WebM (no audio)
+      // Record WebM on Chromium (reliable, no dropped frames). MP4 only as a Safari fallback —
+      // Chrome's native MP4 MediaRecorder drops frames; we transcode WebM→MP4 on save instead.
       const candidates = [
-        "video/mp4;codecs=h264",
         "video/webm;codecs=vp9",
         "video/webm;codecs=vp8",
         "video/webm",
+        "video/mp4;codecs=h264",
       ];
       let selected: string | undefined;
       // @ts-ignore
@@ -320,8 +322,28 @@ export const RecordingControls = forwardRef<RecordingControlsRef, RecordingContr
         }
         // Use the selected container type; default WebM on Chrome/Firefox, MP4 on Safari
         const type = selected ?? "video/webm";
-        const blob = new Blob(chunksRef.current, { type });
-        const ext = (selected && selected.includes("mp4")) ? "mp4" : "webm";
+        let blob = new Blob(chunksRef.current, { type });
+        let ext = (selected && selected.includes("mp4")) ? "mp4" : "webm";
+        // If we recorded WebM (Chromium path), transcode to MP4 so sellers can upload.
+        if (ext === "webm") {
+          const convertingId = toast.loading("Converting to MP4… 0%");
+          try {
+            blob = await webmToMp4(blob, (ratio) => {
+              const pct = Math.max(0, Math.min(100, Math.round((ratio || 0) * 100)));
+              toast.loading(`Converting to MP4… ${pct}%`, { id: convertingId });
+            });
+            ext = "mp4";
+            toast.success("Converted to MP4", { id: convertingId });
+          } catch (e) {
+            console.error("MP4 conversion failed", e);
+            toast.error("MP4 conversion failed — saved as WebM", { id: convertingId });
+            onLogEntry({
+              time: new Date().toLocaleTimeString(),
+              status: "error",
+              message: "MP4 conversion failed; kept WebM",
+            });
+          }
+        }
         const fileName = `${currentCode}.${ext}`;
 
         const downloadBlob = (b: Blob, name: string) => {
